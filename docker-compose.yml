@@ -1,0 +1,6 @@
+pilgrimengineering:
+  image: payara/micro:173
+  ports:
+    - 8080:8080
+    - 8181:8181
+    - 5900:5900

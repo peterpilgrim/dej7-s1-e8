@@ -1,0 +1,190 @@
+/*******************************************************************************
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS HEADER.
+ *
+ * Copyright (c) 2017 by Peter Pilgrim, Milton Keynes, P.E.A.T UK LTD
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Creative Commons 3.0
+ * Non Commercial Non Derivation Share-alike License
+ * https://creativecommons.org/licenses/by-nc-nd/4.0/
+ *
+ * Developers:
+ * Peter Pilgrim -- design, development and implementation
+ *               -- Blog: http://www.xenonique.co.uk/blog/
+ *               -- Twitter: @peter_pilgrim
+ *
+ * Contributors:
+ *
+ *******************************************************************************/
+// Template based on Java EE 7 Developer Handbook by Peter A. Pilgrim
+// http://www.xenonique.co.uk/blog/ (CC) 2017
+
+
+plugins {
+    id 'com.github.jlouns.cpe' version '0.4.1'
+}
+
+apply plugin: 'java'
+apply plugin: 'war'
+apply plugin: 'idea'
+
+
+// Define equivalent Maven GAV coordinates.
+group = 'uk.co.xenonique.digital.training'
+archivesBaseName = 'restful-stadia-services'
+version = '1.0-SNAPSHOT'
+
+
+ext {
+    hamcrestVersion         = "1.3"
+    javaeeVersion           = "7.0"
+    junitVersion            = "4.12"
+    mockitoVersion          = "1.10.19"
+    payaraVersion           = "4.1.2.173"
+
+    slf4jVersion            = "1.7.14"
+
+    dockerRepoName          = "peterpilgrim"
+    dockerImageName         = "restful-stadia-services"
+    dockerImageTagVersion   = "1.0"
+    
+
+    payaraUser              = project.hasProperty("payaraUser") ? project.getProperty("payaraUser") : "slickers1995"
+    payaraPassword          = project.hasProperty("PayaraPass") ? project.getProperty("payaraPass") : "toomanysecrets"
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven {
+        url 'http://repository.jboss.org/nexus/content/groups/public'
+    }
+}
+
+dependencies {
+    providedCompile "javax:javaee-api:${javaeeVersion}"
+    providedCompile "fish.payara.extras:payara-micro:${payaraVersion}"
+
+    testCompile "junit:junit:${junitVersion}"
+    testCompile "org.hamcrest:hamcrest-all:${hamcrestVersion}"
+    testCompile "org.mockito:mockito-core:${mockitoVersion}"
+
+}
+
+// Java version compatibility to use when compiling Java source
+sourceCompatibility = '1.8'
+// Java version to generate classes
+targetCompatibility = '1.8'
+
+
+war.setBaseName('ROOT')
+war.setVersion('')
+
+idea {
+
+    module {
+        //if you love browsing Javadoc
+        downloadJavadoc = false
+
+        //and hate reading sources :)
+        downloadSources = true
+    }
+}
+
+task wrapper(type: Wrapper) {
+    gradleVersion = "4.1"
+}
+
+// Override Gradle defaults - a force an exploded JAR view
+sourceSets {
+    main {
+        output.resourcesDir = 'build/classes/main'
+        output.classesDir   = 'build/classes/main'
+    }
+    test {
+        resources {
+            srcDir 'src/test/resources'
+        }
+        resources {
+            srcDir 'src/test/resources-glassfish-embedded'
+        }
+
+        output.resourcesDir = 'build/classes/test'
+        output.classesDir   = 'build/classes/test'
+    }
+}
+
+
+
+
+war {
+}
+
+
+task runMicro(type: Exec, dependsOn: war,
+        description: "Executes the WAR file as a Payara micro service!") {
+    commandLine('java', '-jar', getMicroPath(), '--deploy', war.archivePath)
+}
+
+task uberJar(type: Exec, dependsOn: war,
+        description: "Builds the Uber JAR using the Payara Micro directive") {
+    String uberJarPath = 'build/libs/' + rootProject.name + '.jar'
+    commandLine('java', '-jar', getMicroPath(), '--deploy', war.archivePath, '--outputUberJar', uberJarPath)
+}
+
+
+
+def String getMicroPath() {
+    configurations.providedCompile.find { it.name =~ /payara-micro.*\.jar/ }.absolutePath
+}
+
+
+
+
+task dockerStage(type: Copy, dependsOn: uberJar,
+        description: "Copies the Uber JAR and Dockerfile into the staging area for Docker build") {
+    from ('build/libs') {
+        include rootProject.name + ".jar"
+    }
+    from ('src/main/docker/images/payara') {
+        include "Dockerfile"
+    }
+    into 'build/docker/images/payara'
+}
+
+
+task dockerBuild(type: Exec, dependsOn: dockerStage,
+        description: "Builds the Docker image") {
+
+    commandLine("docker", "build",
+            "-t", "$dockerRepoName/$dockerImageName:$dockerImageTagVersion",
+            "build/docker/images/payara")
+    
+    //    docker build -t peterpilgrim/restful-stadia-services:1.0  src/main/docker/images/payara
+}
+
+
+
+
+
+
+
+task gradleInfo(description: "reports the Gradle version and information") << {
+    println "=" * 80
+    println "=======================       GRADLE INFORMATION      =========================="
+    println "                    gradle = ${gradle}"
+    println "      gradle.gradleHomeDir = ${gradle.gradleHomeDir}"
+    println "  gradle.gradleUserHomeDir = ${gradle.gradleUserHomeDir}"
+    println "      gradle.gradleVersion = ${gradle.gradleVersion}"
+    println "        gradle.rootProject = ${gradle.rootProject}"
+    println "        gradle.rootProject = ${gradle.rootProject}"
+    println "              project.path = ${project.path}"
+    println "        project.projectDir = ${project.projectDir}"
+    println "           project.rootdir = ${project.rootDir}"
+    println "=" * 80
+    println ""
+}
+
+
+
+// End
